@@ -243,27 +243,44 @@ void WeaselTSF::_UninitCompartment() {
 
 HRESULT WeaselTSF::_HandleCompartment(REFGUID guidCompartment) {
   if (IsEqualGUID(guidCompartment, GUID_COMPARTMENT_KEYBOARD_OPENCLOSE)) {
+    auto processReturnKeyEvent = [this]() -> BOOL {
+      if (!_pEditSessionContext)
+        return FALSE;
+      if (!_EnsureServerConnected())
+        return FALSE;
+
+      BOOL handled = (BOOL)m_client.ProcessKeyEvent(
+          weasel::KeyEvent(ibus::Return, ibus::NULL_MASK));
+      _UpdateComposition(_pEditSessionContext);
+      return handled;
+    };
+
     if (_isToOpenClose) {
       BOOL isOpen = _IsKeyboardOpen();
       // clear composition when close keyboard
       if (!isOpen && _pEditSessionContext) {
-        m_client.ClearComposition();
-        _EndComposition(_pEditSessionContext, true);
+        if (!processReturnKeyEvent()) {
+          m_client.ClearComposition();
+          _EndComposition(_pEditSessionContext, true);
+        }
       }
       _EnableLanguageBar(isOpen);
-      _UpdateLanguageBar(_status);
     } else {
-      _status.ascii_mode = !_status.ascii_mode;
+      bool asciiMode = !_status.ascii_mode;
+      _status.ascii_mode = asciiMode;
       _SetKeyboardOpen(true);
+      if (asciiMode) {
+        processReturnKeyEvent();
+        _status.ascii_mode = asciiMode;
+      }
       if (_pLangBarButton && _pLangBarButton->IsLangBarDisabled())
         _EnableLanguageBar(true);
-      _HandleLangBarMenuSelect(_status.ascii_mode
-                                   ? ID_WEASELTRAY_ENABLE_ASCII
-                                   : ID_WEASELTRAY_DISABLE_ASCII);
+      _HandleLangBarMenuSelect(asciiMode ? ID_WEASELTRAY_ENABLE_ASCII
+                                         : ID_WEASELTRAY_DISABLE_ASCII);
       if (_pEditSessionContext)
         m_client.ClearComposition();
-      _UpdateLanguageBar(_status);
     }
+    _UpdateLanguageBar(_status);
   } else if (IsEqualGUID(guidCompartment,
                          GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION)) {
     BOOL isOpen = _IsKeyboardOpen();
