@@ -247,21 +247,32 @@ HRESULT WeaselTSF::_HandleCompartment(REFGUID guidCompartment) {
       BOOL isOpen = _IsKeyboardOpen();
       // clear composition when close keyboard
       if (!isOpen && _pEditSessionContext) {
-        m_client.ClearComposition();
-        _EndComposition(_pEditSessionContext, true);
+        BOOL handled = FALSE;
+        if (_EnsureServerConnected()) {
+          handled = (BOOL)m_client.ProcessKeyEvent(
+              weasel::KeyEvent(ibus::Return, ibus::NULL_MASK));
+          _UpdateComposition(_pEditSessionContext);
+        }
+        if (!handled) {
+          m_client.ClearComposition();
+          _EndComposition(_pEditSessionContext, true);
+        }
       }
       _EnableLanguageBar(isOpen);
       _UpdateLanguageBar(_status);
     } else {
-      _status.ascii_mode = !_status.ascii_mode;
-      _SetKeyboardOpen(true);
+      _status.ascii_mode = !_IsKeyboardOpen();
+      if (_status.ascii_mode && _pEditSessionContext &&
+          _EnsureServerConnected()) {
+        m_client.ProcessKeyEvent(
+            weasel::KeyEvent(ibus::Return, ibus::NULL_MASK));
+        _UpdateComposition(_pEditSessionContext);
+      }
       if (_pLangBarButton && _pLangBarButton->IsLangBarDisabled())
         _EnableLanguageBar(true);
       _HandleLangBarMenuSelect(_status.ascii_mode
                                    ? ID_WEASELTRAY_ENABLE_ASCII
                                    : ID_WEASELTRAY_DISABLE_ASCII);
-      if (_pEditSessionContext)
-        m_client.ClearComposition();
       _UpdateLanguageBar(_status);
     }
   } else if (IsEqualGUID(guidCompartment,
